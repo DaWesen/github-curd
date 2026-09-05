@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+data/
+
+# OS / 编辑器
+.DS_Store
+Thumbs.db
+# Vercel CLI 本地链接
+.vercel

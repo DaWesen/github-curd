@@ -1,0 +1,31 @@
+{
+  "name": "my-github-stats",
+  "version": "1.0.0",
+  "description": "A small service for generating GitHub statistics cards.",
+  "main": "src/server.ts",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "tsx --test test/app.test.ts",
+    "check": "tsc --noEmit",
+    "crawler": "tsx src/crawler/cli.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "@octokit/graphql": "^9.0.4",
+    "axios": "^1.19.0",
+    "cheerio": "^1.2.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.13.3",
+    "sharp": "^0.35.4",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3"
+  }
+}
