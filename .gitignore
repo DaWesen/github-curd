@@ -6,6 +6,13 @@ coverage/
 *.log
 data/
 
+# 根目录的本地预览产物（设计稿正本在 images/ 里，不受影响）
+/*.png
+/*.svg
+/*.jpg
+/*.jpeg
+/*.webp
+
 # OS / 编辑器
 .DS_Store
 Thumbs.db

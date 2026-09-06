@@ -1,7 +1,8 @@
-import type { UserStats } from './types';
+import type { CardTheme, ThemeName, UserStats } from './types';
 import { cardFontStacks, type CardOptions } from './types';
 import { getTheme } from './themes';
-import { neonStarlightBackground } from './neon-starlight-bg';
+import { themeBackgrounds, type ThemeBackground } from './theme-bgs';
+import { layoutFor } from './card-layouts';
 
 // GitHub 官方语言色板（github/linguist languages.yml），与 github.com 仓库页语言标识同色
 const languageColors: Record<string, string> = {
@@ -192,15 +193,16 @@ function lineChart(data: UserStats, x: number, y: number, width: number, height:
     return `<polygon points="${x},${y + height} ${points} ${x + width},${y + height}" fill="${color}" fill-opacity=".18"/><polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
   }
 
-// ------------------------- 霓虹星空主题（霓虹星空.png 设计稿底图） -------------------------
-// 卡片 = 设计稿底图 + 数据叠层：底图由 scripts/build-bg.js 预处理生成，代码只负责把数据画进
-// 设计稿留出的槽位。下方是全部槽位与数据的对照表——图标是烙在底图里的，标签必须跟图标语义一致，
+// ------------------------- 设计稿底图渲染器（全部主题共用） -------------------------
+// 卡片 = 设计稿底图 + 数据叠层：底图由 scripts/build-bg.js 从 images/<主题>.png 预处理生成
+// （统一 1024×1536、擦除全部占位元素），代码只负责把数据画进设计稿留出的槽位。
+// 下方是全部槽位与数据的对照表——图标是烙在底图里的，标签必须跟图标语义一致，
 // 改数据前先对照这里（历史上星环面板被错放过 Repos/Forks、人形行被错放过 Contributed To，别再犯）：
 //
 // 【头图区】
-//   霓虹圆环           → 用户头像（圆形 clipPath 嵌入；拉不到头像时保持纯装饰环）
+//   装饰圆环           → 用户头像（圆形 clipPath 嵌入；拉不到头像时保持纯装饰环）
 //   环右侧 4 行        → 姓名 / @登录名 / 简介 / 位置·加入年份
-//   顶部星空居中       → 座右铭（?motto= 参数，可选，斜体带引号）
+//   顶部艺术区居中     → 座右铭（?motto= 参数，可选，斜体带引号）
 //
 // 【右上图表面板】（柱状小图标）
 //   折线 + 月份刻度    → 近 12 个月按周聚合的贡献折线；右上角文字 = 年度贡献总数
@@ -220,50 +222,93 @@ function lineChart(data: UserStats, x: number, y: number, width: number, height:
 // 【三个小面板】（自左向右，面板图标决定主题，不可互换）
 //   🪐 星环/绕行轨道   → 贡献主题：Contributions（近一年贡献数，第一行大数）
 //                        + Contributed（贡献过的仓库数 contributedTo）
-//   🔥 火焰            → 连击主题：Current（当前连击天数）+ Longest（最长连击天数）
-//   ⫛ PR 双支线        → PR 主题：PRs（近一年拉取请求）+ Reviews（近一年为他人 PR 的评审数）
+//   🔥 火焰/水晶       → 连击主题：Current（当前连击天数）+ Longest（最长连击天数）
+//   ⫛ 双支线/星座      → PR 主题：PRs（近一年拉取请求）+ Reviews（近一年为他人 PR 的评审数）
 //
 // 【热力图面板】（循环箭头图标）
 //   53×7 圆点网格      → 逐日贡献日历（列按周、行按星期对齐），末列对齐最新一天的真实星期
 //   左侧彩色圆点 4 行  → 亮点指标：年度总量 / 单日峰值 / 活跃天数 / 日均
 //   底部刻度           → 月份标签（取真实月初）
 //
-// 【底栏】（</> / ⭐ / 🚀）
-//   三段文字           → 公开仓库数 / 总 Star 数 / 年度贡献数（与上方面板呼应的摘要行）
+// 【底栏】保持设计稿原样（装饰图标 / 主题标志），不叠绘数据
 //
-// 全部叠层坐标为对设计稿逐像素实测，NEON_* 常量即测量结果；改底图后须重新测量。
-const NEON_WIDTH = 1024;
-const NEON_HEIGHT = 1536;
-const NEON_PANEL = '#010e28';
-const NEON_STAT_ROWS = [714, 759, 802, 845, 889];
-const NEON_LANG_ROWS = [716, 766, 816, 866];
-const NEON_LANG_COLUMNS = [
-  { dotX: 552, nameX: 570, valueX: 712 },
-  { dotX: 780, nameX: 798, valueX: 956 },
-];
-const NEON_MINI_ROWS = [1023, 1068];
-const NEON_HEAT_BULLETS = [
-  { y: 1220, color: '#6c41fa' },
-  { y: 1255, color: '#0275fc' },
-  { y: 1289, color: '#f462b4' },
-  { y: 1323, color: '#f87021' },
-];
-// 热力图 53 周 × 7 天，圆点几何按设计稿网格区域（189..946 × 1220..1338）重新推算
-const NEON_HEAT = { x0: 189, x1: 946, y0: 1220, y1: 1338, radius: 5 };
-const NEON_HEAT_LEVELS = ['#151954', '#2b2a6e', '#5640c8', '#8b5cf6', '#c9b8ff'];
-const NEON_RING = { cx: 400, cy: 760, r: 62 };
-// 头图霓虹环实测圆心 (200, 265)、内半径约 117；头像取 r=110，与环内缘留一圈暗缝
-const NEON_AVATAR = { cx: 200, cy: 265, r: 110 };
-const NEON_CHART = { x0: 556, x1: 961, top: 405, base: 567 };
+// 全部叠层坐标为对设计稿逐像素实测（所有主题共用同一模板），TPL_* 常量即测量结果；
+// 更换/重制底图后须核对坐标是否仍然对得上。
+// 全部叠层坐标在 src/card-layouts.ts 里按设计稿逐像素实测（通用模板 + 逐主题覆盖）；
+// 更换/重制底图后须核对坐标是否仍然对得上。
+const TPL_WIDTH = 1024;
+const TPL_HEIGHT = 1536;
 
-function neonCompact(n: number): string {
+// 叠层配色：深色面板直接用主题自带的浅色文字；樱花物语/琥珀暖阳的设计稿是浅色面板，
+// 旧主题色按深色底定的部分在这里按设计稿覆盖（heatAccent 同时用于热力图分级色）
+interface DesignPalette {
+  heroName: string; heroLogin: string; heroBio: string; heroMeta: string; motto: string;
+  headerLabel: string; headerTotal: string; axisTick: string;
+  statLabel: string; statValue: string;
+  grade: string; score: string; ratingWord: string;
+  langName: string; langValue: string;
+  miniLabel: string; miniValue: string; highlight: string; heatTick: string;
+  chartLine: [string, string, string]; chartArea: string; ringArc: [string, string]; heatAccent: string;
+}
+
+function designPalette(theme: CardTheme): DesignPalette {
+  const palette: DesignPalette = {
+    heroName: theme.title, heroLogin: theme.muted, heroBio: theme.body, heroMeta: theme.muted, motto: theme.body,
+    headerLabel: theme.panelTitle, headerTotal: theme.body, axisTick: theme.muted,
+    statLabel: theme.body, statValue: theme.title,
+    grade: theme.title, score: theme.muted, ratingWord: theme.panelTitle,
+    langName: theme.body, langValue: theme.muted,
+    miniLabel: theme.body, miniValue: theme.title, highlight: theme.body, heatTick: theme.muted,
+    chartLine: [theme.glow, theme.accent, theme.chart], chartArea: theme.accent, ringArc: [theme.glow, theme.accent], heatAccent: theme.accent,
+  };
+  // 浅色设计稿的深色文字覆盖（面板底色见 src/theme-bgs.ts 的采样值）
+  const overrides: Partial<Record<ThemeName, Partial<DesignPalette>>> = {
+    'sakura-story': {
+      heroName: '#5c2440', heroLogin: '#a4708a', heroBio: '#7d3b57', heroMeta: '#a4708a', motto: '#7d3b57',
+      headerLabel: '#c2497c', headerTotal: '#7d3b57', axisTick: '#a4708a',
+      statLabel: '#7d3b57', statValue: '#4a1f33',
+      grade: '#4a1f33', score: '#a4708a', ratingWord: '#c2497c',
+      langName: '#7d3b57', langValue: '#a4708a',
+      miniLabel: '#7d3b57', miniValue: '#4a1f33', highlight: '#7d3b57', heatTick: '#a4708a',
+      chartLine: ['#f472b6', '#ec4899', '#fbbf24'], chartArea: '#ec4899', ringArc: ['#f472b6', '#be185d'], heatAccent: '#c2497c',
+    },
+    'amber-sun': {
+      heroName: '#5b2f0e', heroLogin: '#9a5b1f', heroBio: '#7a4212', heroMeta: '#9a5b1f', motto: '#7a4212',
+      headerLabel: '#b45309', headerTotal: '#7a4212', axisTick: '#9a5b1f',
+      statLabel: '#7a4212', statValue: '#4a2408',
+      grade: '#4a2408', score: '#9a5b1f', ratingWord: '#b45309',
+      langName: '#7a4212', langValue: '#9a5b1f',
+      miniLabel: '#7a4212', miniValue: '#4a2408', highlight: '#7a4212', heatTick: '#9a5b1f',
+      chartLine: ['#fb923c', '#f59e0b', '#fde047'], chartArea: '#f59e0b', ringArc: ['#fb923c', '#d97706'], heatAccent: '#b45309',
+    },
+    'summer-lemon': { heatAccent: '#eab308' },
+    // 极地星光的头图坐在深色星空上，与浅色面板不同，头图/座右铭要用浅色文字
+    'polar-starlight': {
+      heroName: '#f2f7ff', heroLogin: '#c9daf2', heroBio: '#e2ebfa', heroMeta: '#bdd0ea', motto: '#e6eefb',
+    },
+  };
+  return { ...palette, ...overrides[theme.name] };
+}
+
+// 十六进制取色插值：热力图分级色 = 面板底色 → 强调色 渐进混合（浅色/深色面板都成立）
+function parseHex(color: string): [number, number, number] {
+  return [1, 3, 5].map((index) => parseInt(color.slice(index, index + 2), 16)) as [number, number, number];
+}
+
+function mixHex(a: string, b: string, t: number): string {
+  const pa = parseHex(a);
+  const pb = parseHex(b);
+  return '#' + pa.map((value, index) => Math.round(value + (pb[index] - value) * t).toString(16).padStart(2, '0')).join('');
+}
+
+function compactNumber(n: number): string {
   if (n >= 10000) return `${Math.round(n / 1000)}k`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return formatNumber(n);
 }
 
 // 折线图与热力图共用的横轴月份标签：优先取真实贡献窗口，无数据退回最近 12 个月
-function neonMonthLabels(data: UserStats, count: number): string[] {
+function designMonthLabels(data: UserStats, count: number): string[] {
   const days = data.contributionDays;
   const first = days.length ? new Date(`${days[0].date}T00:00:00Z`) : new Date(NaN);
   const last = days.length ? new Date(`${days[days.length - 1].date}T00:00:00Z`) : new Date(NaN);
@@ -276,13 +321,15 @@ function neonMonthLabels(data: UserStats, count: number): string[] {
   return Array.from({ length: count }, (_, index) => formatMonthLabel(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back[Math.min(index, back.length - 1)], 15))));
 }
 
-export function renderNeonStarlightCard(data: UserStats, opts: CardOptions): string {
+export function renderDesignCard(data: UserStats, opts: CardOptions, theme: CardTheme, background: ThemeBackground): string {
   const fontStack = cardFontStacks[opts.font];
+  const G = layoutFor(theme.name);
+  const palette = designPalette(theme);
+  const heatLevels = [0.14, 0.32, 0.52, 0.74].map((t) => mixHex(background.panelColor, palette.heatAccent, t)).concat(palette.heatAccent) as [string, string, string, string, string];
   const { profile, stats } = data;
   const avatarDataUri = opts.avatarDataUri;
   const days = data.contributionDays;
   const total = stats.contributionsLastYear;
-  const cover = (x: number, y: number, w: number, h: number) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${NEON_PANEL}"/>`;
   const text = (x: number, y: number, size: number, fill: string, content: string, anchor = '', weight = '') =>
     `<text x="${x}" y="${y}" font-size="${size}" fill="${fill}"${anchor ? ` text-anchor="${anchor}"` : ''}${weight ? ` font-weight="${weight}"` : ''}>${content}</text>`;
 
@@ -290,96 +337,91 @@ export function renderNeonStarlightCard(data: UserStats, opts: CardOptions): str
   const joinedYear = profile.joinedAt ? new Date(profile.joinedAt).getUTCFullYear() : 0;
   const heroMeta = [profile.location, joinedYear ? (profile.location ? `${joinedYear}` : `since ${joinedYear}`) : ''].filter(Boolean).join(' · ');
   const hero = [
-    text(372, 270, 23, '#f8faff', escapeXml(truncate(profile.name || profile.login, 14)), '', '700'),
-    text(372, 313, 14, '#9aa8ff', escapeXml(`@${truncate(profile.login, 20)}`)),
-    profile.bio ? text(372, 356, 13, '#ccd4f5', escapeXml(truncate(profile.bio, 22))) : '',
-    heroMeta ? text(372, 398, 12, '#8b93c8', escapeXml(truncate(heroMeta, 24))) : '',
+    text(G.heroX, G.heroYs[0], 23, palette.heroName, escapeXml(truncate(profile.name || profile.login, 14)), '', '700'),
+    text(G.heroX, G.heroYs[1], 14, palette.heroLogin, escapeXml(`@${truncate(profile.login, 20)}`)),
+    profile.bio ? text(G.heroX, G.heroYs[2], 13, palette.heroBio, escapeXml(truncate(profile.bio, 22))) : '',
+    heroMeta ? text(G.heroX, G.heroYs[3], 12, palette.heroMeta, escapeXml(truncate(heroMeta, 24))) : '',
   ].join('');
 
-  // 贡献折线图（右上面板）：近 12 个月按周聚合，霓虹渐变描边 + 渐隐面积
+  // 贡献折线图（右上面板）：近 12 个月按周聚合，主题渐变描边 + 渐隐面积
   const weekValues = data.contributionWeeks.map((week) => week.contributions);
   const hasChart = weekValues.length > 1 && weekValues.some((value) => value > 0);
   let chart = '';
   if (hasChart) {
     const max = Math.max(...weekValues, 1);
     const points = weekValues.map((value, index) =>
-      `${(NEON_CHART.x0 + index / (weekValues.length - 1) * (NEON_CHART.x1 - NEON_CHART.x0)).toFixed(1)},${(NEON_CHART.base - value / max * (NEON_CHART.base - NEON_CHART.top)).toFixed(1)}`);
-    chart = `<polygon points="${NEON_CHART.x0},${NEON_CHART.base} ${points.join(' ')} ${NEON_CHART.x1},${NEON_CHART.base}" fill="url(#neonArea)"/><polyline class="neonPulse" points="${points.join(' ')}" fill="none" stroke="url(#neonLine)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#neonGlow)"/>`;
+      `${(G.chart.x0 + index / (weekValues.length - 1) * (G.chart.x1 - G.chart.x0)).toFixed(1)},${(G.chart.base - value / max * (G.chart.base - G.chart.top)).toFixed(1)}`);
+    chart = `<polygon points="${G.chart.x0},${G.chart.base} ${points.join(' ')} ${G.chart.x1},${G.chart.base}" fill="url(#designArea)"/><polyline class="designPulse" points="${points.join(' ')}" fill="none" stroke="url(#designLine)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#designGlow)"/>`;
   }
-  const chartAxis = neonMonthLabels(data, 6).map((label, index, labels) => {
-    const x = NEON_CHART.x0 + index / (labels.length - 1) * (NEON_CHART.x1 - NEON_CHART.x0);
+  const chartAxis = designMonthLabels(data, 6).map((label, index, labels) => {
+    const x = G.chart.x0 + index / (labels.length - 1) * (G.chart.x1 - G.chart.x0);
     const anchor = index === 0 ? '' : index === labels.length - 1 ? 'end' : 'middle';
-    return text(Math.round(x), 588, 9.5, '#7c87b8', label, anchor);
+    return text(Math.round(x), G.chart.axisY, 9.5, palette.axisTick, label, anchor);
   }).join('');
 
-  // 统计面板五行：行顺序固定，标签必须与底图行图标同义（星星/圆环记录/双支线/感叹圆/人形）
-  const statRows: Array<[string, string]> = [
-    ['Total Stars', formatNumber(stats.stars)],                        // ⭐ 星星图标：收到 Star 总数
-    ['Contributions · 1yr', formatNumber(stats.contributionsLastYear)], // ◎ 圆环记录图标：近一年贡献
-    ['Pull Requests · 1yr', formatNumber(stats.pullRequests)],         // ⫛ 双支线图标：近一年 PR
-    ['Issues · 1yr', formatNumber(stats.issues)],                      // ⊕ 感叹圆图标：近一年 Issue
-    ['Followers', formatNumber(stats.followers)],                      // 👥 人形图标：关注者（勿放其他指标）
-  ];
+  // 统计面板：行数与标签由布局决定，行顺序固定，标签必须与底图行图标同义
+  const statRows: Array<[string, string]> = G.statLabels.map((label, index) => [label, formatNumber(statMetric(label, stats, data))]);
   const statLayer = statRows.map(([label, value], index) => {
-    const y = NEON_STAT_ROWS[index];
-    return text(106, y + 4, 13, '#b4bde6', label) + text(298, y + 4, 15, '#f4f6ff', value, 'end', '700');
+    const y = G.statRows[index];
+    return text(G.statLabelX, y + 4, 13, palette.statLabel, label) + text(G.statValueX, y + 4, 15, palette.statValue, value, 'end', '700');
   }).join('');
-  // 评级环：设计稿在统计面板右侧留了空霓虹圆环 + 下方空胶囊，分别画评级进度弧和 RATING 字样
+  // 评级环：设计稿在统计面板右侧留了空圆环 + 下方空胶囊，分别画评级进度弧和 RATING 字样
   const ringFraction = Math.min(Math.max(stats.rating, 0), 100) / 100;
-  const ringLength = 2 * Math.PI * NEON_RING.r;
-  const ringLayer = `<circle cx="${NEON_RING.cx}" cy="${NEON_RING.cy}" r="${NEON_RING.r}" fill="none" stroke="url(#neonArc)" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(ringLength * ringFraction).toFixed(1)} ${ringLength.toFixed(1)}" transform="rotate(-90 ${NEON_RING.cx} ${NEON_RING.cy})" filter="url(#neonGlow)"/>` +
-    text(NEON_RING.cx, 772, 36, '#ffffff', grade(stats.rating), 'middle', '700') +
-    text(NEON_RING.cx, 794, 12.5, '#9aa8ff', `${stats.rating} / 100`, 'middle') +
-    `<text x="397" y="880" text-anchor="middle" font-size="13" letter-spacing="4" fill="#a78bfa">RATING</text>`;
+  const ringLength = 2 * Math.PI * G.ring.r;
+  const ringLayer = `<circle cx="${G.ring.cx}" cy="${G.ring.cy}" r="${G.ring.r}" fill="none" stroke="url(#designArc)" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(ringLength * ringFraction).toFixed(1)} ${ringLength.toFixed(1)}" transform="rotate(-90 ${G.ring.cx} ${G.ring.cy})" filter="url(#designGlow)"/>` +
+    text(G.ring.cx, G.gradeY, 36, palette.grade, grade(stats.rating), 'middle', '700') +
+    text(G.ring.cx, G.scoreY, 12.5, palette.score, `${stats.rating} / 100`, 'middle') +
+    `<text x="${G.ring.cx - 3}" y="${G.ratingY}" text-anchor="middle" font-size="13" letter-spacing="4" fill="${palette.ratingWord}">RATING</text>`;
 
-  // 语言占比：两列 × 四行，圆点重着色为 GitHub 官方语言色
-  const languages = data.languages.slice(0, 8);
+  // 语言占比：行数 × 两列，圆点着色为 GitHub 官方语言色
+  const languageCount = G.langRows.length * G.langColumns.length;
+  const languages = data.languages.slice(0, languageCount);
   const languageLayer = languages.map((language, index) => {
-    const column = NEON_LANG_COLUMNS[index % 2];
-    const y = NEON_LANG_ROWS[Math.floor(index / 2)];
+    const column = G.langColumns[index % G.langColumns.length];
+    const y = G.langRows[Math.floor(index / G.langColumns.length)];
     return `<circle cx="${column.dotX}" cy="${y}" r="8" fill="${languageColor(language.name)}"/>` +
-      text(column.nameX, y + 4.5, 13, '#dce2ff', escapeXml(truncate(language.name, 16))) +
-      text(column.valueX, y + 4.5, 12, '#98a2d8', `${language.percentage}%`, 'end');
+      text(column.nameX, y + 4.5, 13, palette.langName, escapeXml(truncate(language.name, 16))) +
+      text(column.valueX, y + 4.5, 12, palette.langValue, `${language.percentage}%`, 'end');
   }).join('');
 
   // 三个小面板：面板图标决定两行主题，不可互换（星环=贡献、火焰=连击、双支线=拉取请求）
   // 星环面板标签较长，字号缩到 11.5、数值锚点右移，避免和多位数值碰撞
   const miniPanels: Array<{ labelX: number; valueX: number; labelSize?: number; rows: Array<[string, string]> }> = [
-    { labelX: 214, valueX: 318, labelSize: 11.5, rows: [
+    { labelX: G.miniPanels[0].labelX, valueX: G.miniPanels[0].valueX, labelSize: G.miniPanels[0].labelSize, rows: [
       ['Contributions', formatNumber(stats.contributionsLastYear)], // 🪐 星环：近一年贡献总数（此面板第一行大数）
       ['Contributed', formatNumber(stats.contributedTo)],           // 🪐 星环：贡献过的仓库数
     ] },
-    { labelX: 522, valueX: 627, rows: [
+    { labelX: G.miniPanels[1].labelX, valueX: G.miniPanels[1].valueX, rows: [
       ['Current', `${stats.currentStreak}d`],                       // 🔥 火焰：当前连击天数
       ['Longest', `${stats.longestStreak}d`],                       // 🔥 火焰：最长连击天数
     ] },
-    { labelX: 827, valueX: 955, rows: [
+    { labelX: G.miniPanels[2].labelX, valueX: G.miniPanels[2].valueX, rows: [
       ['PRs', formatNumber(stats.pullRequests)],                    // ⫛ 双支线：近一年拉取请求
       ['Reviews', formatNumber(stats.reviews)],                     // ⫛ 双支线：近一年为他人 PR 的评审数
     ] },
   ];
   const miniLayer = miniPanels.map((panel) => panel.rows.map(([label, value], index) => {
-    const y = NEON_MINI_ROWS[index];
-    return text(panel.labelX, y + 4, panel.labelSize ?? 12, '#a6afdd', label) + text(panel.valueX, y + 4, 15, '#f4f6ff', value, 'end', '700');
+    const y = G.miniRows[index];
+    return text(panel.labelX, y + 4, panel.labelSize ?? 12, palette.miniLabel, label) + text(panel.valueX, y + 4, 15, palette.miniValue, value, 'end', '700');
   }).join('')).join('');
 
-  // 贡献热力图：真实 53 周 × 7 天日历（列按周、行按星期对齐），左侧四个彩色圆点改为亮点指标
+  // 贡献热力图：真实 53 周 × 7 天日历（列按周、行按星期对齐），左侧彩色圆点旁为亮点指标
   const maxDay = days.reduce((peak, day) => Math.max(peak, day.contributions), 0);
   const activeDays = days.filter((day) => day.contributions > 0).length;
   const perDay = days.length ? total / days.length : 0;
   const highlights = [
-    `${neonCompact(total)} total`,
+    `${compactNumber(total)} total`,
     `peak ${maxDay}`,
     `${activeDays} active`,
     `${perDay.toFixed(1)}/day`,
   ];
-  const bulletLayer = NEON_HEAT_BULLETS.map((bullet, index) => text(86, bullet.y + 4, 11.5, '#a6afdd', highlights[index] || '')).join('');
+  const bulletLayer = G.heatBulletYs.map((y, index) => text(G.heatBulletX, y + 4, 11.5, palette.highlight, highlights[index] || '')).join('');
   let heatDots = '';
   if (days.length) {
     const lastWeekday = new Date(`${days[days.length - 1].date}T00:00:00Z`).getUTCDay();
     const weekDays = 7;
-    const pitchX = (NEON_HEAT.x1 - NEON_HEAT.x0) / 52;
-    const pitchY = (NEON_HEAT.y1 - NEON_HEAT.y0) / 6;
+    const pitchX = (G.heat.x1 - G.heat.x0) / 52;
+    const pitchY = (G.heat.y1 - G.heat.y0) / 6;
     const max = Math.max(maxDay, 1);
     days.forEach((day, index) => {
       // 最新一天落在网格末列的其真实星期上，向前逐格回推
@@ -388,14 +430,14 @@ export function renderNeonStarlightCard(data: UserStats, opts: CardOptions): str
       const value = day.contributions;
       const ratio = value / max;
       const level = value === 0 ? 0 : ratio < 0.3 ? 1 : ratio < 0.55 ? 2 : ratio < 0.8 ? 3 : 4;
-      heatDots += `<circle cx="${(NEON_HEAT.x0 + Math.floor(cell / weekDays) * pitchX).toFixed(1)}" cy="${(NEON_HEAT.y0 + (cell % weekDays) * pitchY).toFixed(1)}" r="${NEON_HEAT.radius}" fill="${NEON_HEAT_LEVELS[level]}"/>`;
+      heatDots += `<circle cx="${(G.heat.x0 + Math.floor(cell / weekDays) * pitchX).toFixed(1)}" cy="${(G.heat.y0 + (cell % weekDays) * pitchY).toFixed(1)}" r="${G.heat.radius}" fill="${heatLevels[level]}"/>`;
     });
   }
   // 热力图月份刻度：取窗口内真实月初，过密时跳过
   const heatTicks: Array<{ label: string; x: number }> = [];
   if (days.length) {
     const lastWeekday = new Date(`${days[days.length - 1].date}T00:00:00Z`).getUTCDay();
-    const pitchX = (NEON_HEAT.x1 - NEON_HEAT.x0) / 52;
+    const pitchX = (G.heat.x1 - G.heat.x0) / 52;
     let lastColumn = -99;
     days.forEach((day, index) => {
       const cell = 364 + lastWeekday - (days.length - 1 - index);
@@ -403,72 +445,49 @@ export function renderNeonStarlightCard(data: UserStats, opts: CardOptions): str
       const date = new Date(`${day.date}T00:00:00Z`);
       const column = Math.floor(cell / 7);
       if (date.getUTCDate() === 1 && column - lastColumn >= 3) {
-        heatTicks.push({ label: monthAbbreviations[date.getUTCMonth()], x: NEON_HEAT.x0 + column * pitchX });
+        heatTicks.push({ label: monthAbbreviations[date.getUTCMonth()], x: G.heat.x0 + column * pitchX });
         lastColumn = column;
       }
     });
   }
-  const heatTickLabels = (heatTicks.length >= 2 ? heatTicks : neonMonthLabels(data, 6).map((label, index) => ({ label, x: NEON_HEAT.x0 + Math.round(index / 5 * 52) * (NEON_HEAT.x1 - NEON_HEAT.x0) / 52 })))
+  const heatTickLabels = (heatTicks.length >= 2 ? heatTicks : designMonthLabels(data, 6).map((label, index) => ({ label, x: G.heat.x0 + Math.round(index / 5 * 52) * (G.heat.x1 - G.heat.x0) / 52 })))
     .map((tick, index, ticks) => {
       const anchor = index === 0 ? '' : index === ticks.length - 1 ? 'end' : 'middle';
-      return text(Math.round(tick.x), 1381, 9.5, '#7c87b8', tick.label, anchor);
+      return text(Math.round(tick.x), G.heatTickY, 9.5, palette.heatTick, tick.label, anchor);
     }).join('');
 
-  // 底栏摘要：仓库 / Star / 年度贡献
-  const footer = [
-    text(122, 1476, 12.5, '#b4bde6', `${formatNumber(stats.publicRepositories)} public repositories`),
-    text(368, 1476, 12.5, '#b4bde6', `${formatNumber(stats.stars)} total stars`),
-    text(893, 1476, 12.5, '#b4bde6', `${neonCompact(total)} contributions`, 'end'),
-  ].join('');
-
-  // 头像：服务端拉取失败时缺省，霓虹环退回纯装饰（设计稿原貌）
+  // 头像：服务端拉取失败时缺省，装饰环退回纯装饰（设计稿原貌）
   const avatarLayer = avatarDataUri
-    ? `<clipPath id="neonAvatarClip"><circle cx="${NEON_AVATAR.cx}" cy="${NEON_AVATAR.cy}" r="${NEON_AVATAR.r}"/></clipPath>` +
-      `<image xlink:href="${avatarDataUri}" x="${NEON_AVATAR.cx - NEON_AVATAR.r}" y="${NEON_AVATAR.cy - NEON_AVATAR.r}" width="${NEON_AVATAR.r * 2}" height="${NEON_AVATAR.r * 2}" preserveAspectRatio="xMidYMid slice" clip-path="url(#neonAvatarClip)"/>`
+    ? `<clipPath id="neonAvatarClip"><circle cx="${G.avatar.cx}" cy="${G.avatar.cy}" r="${G.avatar.r}"/></clipPath>` +
+      `<image xlink:href="${avatarDataUri}" x="${G.avatar.cx - G.avatar.r}" y="${G.avatar.cy - G.avatar.r}" width="${G.avatar.r * 2}" height="${G.avatar.r * 2}" preserveAspectRatio="xMidYMid slice" clip-path="url(#neonAvatarClip)"/>`
     : '';
 
-  // 座右铭：卡片最上方星空区居中斜体；引号在渲染层包上，长度超限在这里兜底截断
+  // 座右铭：卡片最上方艺术区居中斜体；引号在渲染层包上，长度超限在这里兜底截断
   const mottoLayer = opts.motto
-    ? `<text x="512" y="66" text-anchor="middle" font-size="16" font-style="italic" letter-spacing="1.5" fill="#c7cfff">${escapeXml(`“${truncate(opts.motto.trim(), 40)}”`)}</text>`
+    ? `<text x="${G.motto.x}" y="${G.motto.y}" text-anchor="middle" font-size="16" font-style="italic" letter-spacing="1.5" fill="${palette.motto}">${escapeXml(`“${truncate(opts.motto.trim(), 40)}”`)}</text>`
     : '';
 
-  // 面板内占位元素（虚线 / "--" / 装饰圆点 / 装饰刻度）统一同色覆盖
-  const covers = [
-    ...NEON_STAT_ROWS.flatMap((y) => [cover(100, y - 8, 154, 16), cover(266, y - 8, 34, 16)]),
-    ...NEON_LANG_ROWS.flatMap((y) => [
-      `<circle cx="${NEON_LANG_COLUMNS[0].dotX}" cy="${y}" r="10" fill="${NEON_PANEL}"/><circle cx="${NEON_LANG_COLUMNS[1].dotX}" cy="${y}" r="10" fill="${NEON_PANEL}"/>`,
-      cover(570, y - 8, 146, 16), cover(798, y - 8, 162, 16),
-    ]),
-    ...NEON_MINI_ROWS.flatMap((y) => [cover(206, y - 8, 112, 16), cover(514, y - 8, 118, 16), cover(819, y - 8, 140, 16)]),
-    cover(183, 1206, 770, 146),
-    ...NEON_HEAT_BULLETS.map((bullet) => cover(84, bullet.y - 8, 88, 16)),
-    cover(160, 1365, 786, 22),
-    cover(548, 571, 424, 20),
-    cover(114, 1460, 200, 20), cover(678, 1460, 220, 20),
-  ].join('');
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${NEON_WIDTH}" height="${NEON_HEIGHT}" viewBox="0 0 ${NEON_WIDTH} ${NEON_HEIGHT}" role="img" aria-labelledby="neonTitle neonDesc">
-  <title id="neonTitle">${escapeXml(profile.name || profile.login)} GitHub stats</title>
-  <desc id="neonDesc">GitHub contribution and language statistics for ${escapeXml(profile.login)}</desc>
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${TPL_WIDTH}" height="${TPL_HEIGHT}" viewBox="0 0 ${TPL_WIDTH} ${TPL_HEIGHT}" role="img" aria-labelledby="cardTitle cardDesc">
+  <title id="cardTitle">${escapeXml(profile.name || profile.login)} GitHub stats</title>
+  <desc id="cardDesc">GitHub contribution and language statistics for ${escapeXml(profile.login)}</desc>
   <defs>
-    <linearGradient id="neonLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff3cac"/><stop offset=".5" stop-color="#8b5cf6"/><stop offset="1" stop-color="#38bdf8"/></linearGradient>
-    <linearGradient id="neonArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7c3aed" stop-opacity=".38"/><stop offset="1" stop-color="#7c3aed" stop-opacity="0"/></linearGradient>
-    <linearGradient id="neonArc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff3cac"/><stop offset="1" stop-color="#3c8ce7"/></linearGradient>
-    <filter id="neonGlow" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <linearGradient id="designLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${palette.chartLine[0]}"/><stop offset=".5" stop-color="${palette.chartLine[1]}"/><stop offset="1" stop-color="${palette.chartLine[2]}"/></linearGradient>
+    <linearGradient id="designArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${palette.chartArea}" stop-opacity=".38"/><stop offset="1" stop-color="${palette.chartArea}" stop-opacity="0"/></linearGradient>
+    <linearGradient id="designArc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${palette.ringArc[0]}"/><stop offset="1" stop-color="${palette.ringArc[1]}"/></linearGradient>
+    <filter id="designGlow" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     <style>
       text { font-family: ${fontStack}; }
-      .neonPulse { animation: neonPulse 3.2s ease-in-out infinite; }
-      @keyframes neonPulse { 0%, 100% { opacity: .78; } 50% { opacity: 1; } }
-      @media (prefers-reduced-motion: reduce) { .neonPulse { animation: none; opacity: 1; } }
+      .designPulse { animation: designPulse 3.2s ease-in-out infinite; }
+      @keyframes designPulse { 0%, 100% { opacity: .78; } 50% { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { .designPulse { animation: none; opacity: 1; } }
     </style>
   </defs>
-  <image xlink:href="${neonStarlightBackground}" x="0" y="0" width="${NEON_WIDTH}" height="${NEON_HEIGHT}"/>
+  <image xlink:href="${background.dataUri}" x="0" y="0" width="${TPL_WIDTH}" height="${TPL_HEIGHT}"/>
   ${avatarLayer}
   ${mottoLayer}
-  ${covers}
   ${hero}
-  ${text(598, 360, 12, '#8f9ad0', 'CONTRIBUTIONS', '', '700')}
-  ${text(NEON_CHART.x1, 360, 12, '#aab3dd', `${formatNumber(total)} contributions · past year`, 'end')}
+  ${text(G.chart.headerLabelX, G.chart.headerLabelY, 12, palette.headerLabel, 'CONTRIBUTIONS', '', '700')}
+  ${text(G.chart.headerTotalX, G.chart.headerLabelY, 12, palette.headerTotal, `${formatNumber(total)} contributions · past year`, 'end')}
   ${chart}
   ${chartAxis}
   ${statLayer}
@@ -478,24 +497,42 @@ export function renderNeonStarlightCard(data: UserStats, opts: CardOptions): str
   ${bulletLayer}
   ${heatDots}
   ${heatTickLabels}
-  ${footer}
 </svg>`;
 }
 
-// 经典自绘风格的统计卡片（除霓虹星空外的所有主题共用），版面自上而下：
+// 统计行标签 → 指标值：标签顺序与底图行图标语义绑定（改标签前先对照设计稿图标）
+function statMetric(label: string, stats: UserStats['stats'], data: UserStats): number {
+  switch (label) {
+    case 'Total Stars': return stats.stars;
+    case 'Contributions · 1yr': return stats.contributionsLastYear;
+    case 'Public Repositories': return stats.publicRepositories;
+    case 'Pull Requests · 1yr': return stats.pullRequests;
+    case 'Issues · 1yr': return stats.issues;
+    case 'Followers': return stats.followers;
+    default: return data.stats.contributionsLastYear;
+  }
+}
+
+// 统计卡片入口：所有主题都使用「设计稿底图 + 数据叠层」渲染器（底图见 src/theme-bgs.ts）；
+// 万一某主题缺底图，退回经典自绘样式保证出卡不中断
+export function renderStatsCard(data: UserStats, themeName?: unknown, options: Partial<CardOptions> = {}): string {
+  const opts: CardOptions = { ...defaultCardOptions, ...options };
+  const theme = getTheme(themeName);
+  const background = themeBackgrounds[theme.name];
+  if (background) return renderDesignCard(data, opts, theme, background);
+  return renderClassicCard(data, opts, theme);
+}
+
+// 经典自绘风格的统计卡片（无设计稿底图时的兜底），版面自上而下：
 //   顶部        → 姓名 + @登录名（居中标题）
 //   左列四行    → 年度贡献 / 公开仓库 / 加入时间 / 联系方式（带辉光图标）
 //   右上        → 近 12 个月按周贡献折线 + 月份轴
 //   中部两面板  → GitHub Stats（Star/贡献/PR/Issue/Contributed 五行 + 评级环）｜Most Used Languages（占比条 + 两列明细）
 //   底部三面板  → Total Contributions ｜ Current Streak（含最长连击）｜Repositories Contributed
 //   最底        → 近 31 天逐日贡献折线面板
-export function renderStatsCard(data: UserStats, themeName?: unknown, options: Partial<CardOptions> = {}): string {
-  const opts: CardOptions = { ...defaultCardOptions, ...options };
+function renderClassicCard(data: UserStats, opts: CardOptions, theme: CardTheme): string {
   const fontStack = cardFontStacks[opts.font];
   const { profile, stats } = data;
-  const theme = getTheme(themeName);
-  // 霓虹星空主题使用 霓虹星空.png 设计稿底图的专属渲染器，不走自绘样式
-  if (theme.name === 'neon-starlight') return renderNeonStarlightCard(data, opts);
   const title = profile.name || profile.login;
   const languages = data.languages.slice(0, 8);
   const languageTotal = languages.reduce((total, item) => total + item.percentage, 0) || 1;

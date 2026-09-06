@@ -1,5 +1,6 @@
-// 本地预览脚本：用逼真的离线假数据渲染霓虹星空卡片（node scripts/render-fixture.js）
-// 输出 data/.preview/neon-card.png（正常数据）与 neon-card-bare.png（极端数据：空语言/无贡献/超长字段）
+// 本地预览脚本：用逼真的离线假数据渲染全部主题卡片（node scripts/render-fixture.js）
+// 输出 data/.preview/<主题>.png 与 data/.preview/all-themes.png（拼接总览），
+// 另有 neon-card-bare.png（极端数据：空语言/无贡献/超长字段）验证不破版
 const sharp = require(process.cwd() + '/node_modules/sharp');
 const fs = require('fs');
 const path = require('path');
@@ -7,6 +8,7 @@ const path = require('path');
 // tsx 现场转译 card.ts 与其依赖
 require('tsx/cjs');
 const { renderStatsCard } = require(path.join(process.cwd(), 'src', 'card.ts'));
+const { themes } = require(path.join(process.cwd(), 'src', 'themes.ts'));
 
 const PREVIEW_DIR = path.join(__dirname, '..', 'data', '.preview');
 
@@ -58,10 +60,37 @@ function makeFixture() {
 
 (async () => {
   fs.mkdirSync(PREVIEW_DIR, { recursive: true });
-  const svg = renderStatsCard(makeFixture(), 'neon-starlight', { font: 'sans', motto: '仰望星空，脚踏实地' });
-  fs.writeFileSync(path.join(PREVIEW_DIR, 'neon-card.svg'), svg);
-  await sharp(Buffer.from(svg), { density: 72 }).png().toFile(path.join(PREVIEW_DIR, 'neon-card.png'));
-  console.log('svg size:', (fs.statSync(path.join(PREVIEW_DIR, 'neon-card.svg')).size / 1024).toFixed(0) + 'KB');
+  const names = Object.keys(themes);
+  const thumbs = [];
+  for (const name of names) {
+    const svg = renderStatsCard(makeFixture(), name, { font: 'sans', motto: '仰望星空，脚踏实地' });
+    fs.writeFileSync(path.join(PREVIEW_DIR, `${name}.svg`), svg);
+    const png = await sharp(Buffer.from(svg), { density: 72 }).resize({ width: 500 }).png().toBuffer();
+    await sharp(png).toFile(path.join(PREVIEW_DIR, `${name}.png`));
+    thumbs.push(png);
+    console.log('rendered:', name);
+  }
+
+  // 拼接总览：3 列 × 4 行
+  const thumbWidth = 500;
+  const thumbHeight = 750;
+  const columns = 3;
+  const rows = Math.ceil(thumbs.length / columns);
+  const gap = 12;
+  const composites = thumbs.map((input, index) => ({
+    input,
+    left: (index % columns) * (thumbWidth + gap),
+    top: Math.floor(index / columns) * (thumbHeight + gap),
+  }));
+  await sharp({
+    create: {
+      width: columns * thumbWidth + (columns - 1) * gap,
+      height: rows * thumbHeight + (rows - 1) * gap,
+      channels: 3,
+      background: '#202028',
+    },
+  }).composite(composites).png().toFile(path.join(PREVIEW_DIR, 'all-themes.png'));
+  console.log('contact sheet: data/.preview/all-themes.png');
 
   // 极端数据：无语言/无贡献/超长字段/满分评级，确认不越界不破版
   const bare = makeFixture();
@@ -70,7 +99,9 @@ function makeFixture() {
   bare.contributionDays = [];
   bare.contributionWeeks = [];
   bare.stats = { ...bare.stats, stars: 1234567, followers: 999999, rating: 100, currentStreak: 0, longestStreak: 0 };
-  const svg2 = renderStatsCard(bare, 'neon-starlight', {});
-  await sharp(Buffer.from(svg2), { density: 72 }).png().toFile(path.join(PREVIEW_DIR, 'neon-card-bare.png'));
-  console.log('bare card done');
+  for (const name of ['neon-starlight', 'minimal-white', 'amber-sun']) {
+    const svg2 = renderStatsCard(bare, name, {});
+    await sharp(Buffer.from(svg2), { density: 72 }).resize({ width: 500 }).png().toFile(path.join(PREVIEW_DIR, `${name}-bare.png`));
+  }
+  console.log('bare cards done');
 })().catch((e) => { console.error('ERR', e); process.exit(1); });

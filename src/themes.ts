@@ -7,7 +7,8 @@ export const themes: Record<ThemeName, CardTheme> = {
   'neon-cyber': {
     name: 'neon-cyber', label: '霓虹赛博', background: '#120b2e', accent: '#ce3dff', initialText: '#120b2e', title: '#ffffff', muted: '#c4b5fd', body: '#e9d5ff', divider: '#3b246b', panelBorder: '#df287a', panelTitle: '#ff3c91', chart: '#f7d63d', glow: '#ff2f88',
   },
-  // 霓虹星空：统计卡片走 霓虹星空.png 底图专属渲染器（card.ts 里分支），这组颜色供语言卡片等通用样式使用
+  // 全部主题的统计卡片都走「设计稿底图 + 数据叠层」渲染器（底图见 images/ 与 src/theme-bgs.ts），
+  // 这组颜色同时供叠层文字/渐变和语言卡片等自绘样式派生用
   'neon-starlight': {
     name: 'neon-starlight', label: '霓虹星空', background: '#00091d', accent: '#b04ef0', initialText: '#00091d', title: '#f8faff', muted: '#8b93c8', body: '#c3caf0', divider: '#232a55', panelBorder: '#6d4fd0', panelTitle: '#a78bfa', chart: '#f0abfc', glow: '#c084fc',
   },
@@ -37,6 +38,9 @@ export const themes: Record<ThemeName, CardTheme> = {
   },
   'polar-starlight': {
     name: 'polar-starlight', label: '极地星光', background: '#eaf6ff', accent: '#2563eb', initialText: '#ffffff', title: '#102a43', muted: '#526579', body: '#334e68', divider: '#c5e4f6', panelBorder: '#2563eb', panelTitle: '#1d4ed8', chart: '#eab308', glow: '#2563eb',
+  },
+  'blue-archive': {
+    name: 'blue-archive', label: '蔚蓝档案', background: '#e8f2ff', accent: '#3b82f6', initialText: '#ffffff', title: '#1e40af', muted: '#6d87b8', body: '#3d5a8a', divider: '#c7ddf5', panelBorder: '#7db4f0', panelTitle: '#2563eb', chart: '#a78bfa', glow: '#38bdf8',
   },
 };
 

@@ -52,11 +52,13 @@ https://你的域名.vercel.app/api/stats/:username
 
 卡片字体可通过 `font` 参数切换：`sans`、`serif`、`mono`、`rounded`。后续下载了新字体，在 `src/types.ts` 的 `CardFont` 联合类型和 `cardFontStacks` 里补充即可。
 
-可用主题：`dreamy-galaxy`（梦幻星河）、`neon-cyber`（霓虹赛博）、`neon-starlight`（霓虹星空）、`aurora-nebula`（星云极光）、`summer-lemon`（夏日柠檬）、`sakura-story`（樱花物语）、`deep-sea-blue`（深海幽蓝）、`amber-sun`（琥珀暖阳）、`emerald-forest`（翡翠森林）、`midnight-count`（暗夜伯爵）、`minimal-white`（极简纯白）、`polar-starlight`（极地星光）。
+可用主题：`dreamy-galaxy`（梦幻星河）、`neon-cyber`（霓虹赛博）、`neon-starlight`（霓虹星空）、`aurora-nebula`（星云极光）、`summer-lemon`（夏日柠檬）、`sakura-story`（樱花物语）、`deep-sea-blue`（深海幽蓝）、`amber-sun`（琥珀暖阳）、`emerald-forest`（翡翠森林）、`midnight-count`（暗夜伯爵）、`minimal-white`（极简纯白）、`polar-starlight`（极地星光）、`blue-archive`（蔚蓝档案）。
 
-其中 `neon-starlight`（霓虹星空）使用根目录 `霓虹星空.png` 设计稿作为卡片底图（1024×1536，压缩为 JPEG 内嵌进 SVG，卡片自包含），头图文案、贡献折线图、统计面板、语言占比、连击指标、贡献热力图等全部为真实数据动态叠绘。用户头像会在服务端拉取后内嵌进头像霓虹环（进程内缓存 1 小时；拉取失败自动退回无头像的纯装饰环，不影响出卡）。
+全部主题的统计卡片都采用「设计稿底图 + 数据叠层」渲染：底图为 `images/<主题中文名>.png`（1024×1536 设计稿，由 `node scripts/build-bg.js` 预处理成内嵌 JPEG，见 `src/theme-bgs.ts`），头图文案、贡献折线图、统计面板、语言占比、连击指标、贡献热力图等全部为真实数据动态叠绘。用户头像会在服务端拉取后内嵌进头图装饰环（进程内缓存 1 小时；拉取失败自动退回无头像的纯装饰环，不影响出卡）。
 
-霓虹星空主题支持 `motto` 参数：座右铭以斜体显示在卡片最上方的星空区域（最长 40 字符，超长截断），例如 `/api/card/DaWesen?theme=neon-starlight&motto=仰望星空，脚踏实地`；其他主题暂不显示该参数。
+所有主题都支持 `motto` 参数：座右铭以斜体显示在卡片最上方的艺术区（最长 40 字符，超长截断），例如 `/api/card/DaWesen?theme=neon-starlight&motto=仰望星空，脚踏实地`。
+
+更换/重制某主题的设计稿时：把新的 1024×1536 PNG 覆盖到 `images/` 对应文件名，重新执行 `node scripts/build-bg.js` 即可（脚本按 `src/card-layouts.ts` 的槽位坐标统一尺寸、擦除设计稿里的占位虚线/圆点/网格并采样面板底色）。多数主题共用通用模板布局；若某张新稿版式与模板出入较大（如极地星光的 6 行统计 + 6 行语言），在 `src/card-layouts.ts` 的 `layoutOverrides` 里为该主题加一组实测坐标覆盖即可，渲染器会自动适配行数与槽位。
 
 ## 开发
 
@@ -64,6 +66,8 @@ https://你的域名.vercel.app/api/stats/:username
 pnpm dev
 pnpm test
 pnpm check
+node scripts/build-bg.js   # 更新 images/ 设计稿后重新生成底图模块 src/theme-bgs.ts
+node scripts/render-fixture.js   # 用离线假数据渲染全部主题预览到 data/.preview/
 ```
 
 ## GitHub 爬虫

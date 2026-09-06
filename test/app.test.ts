@@ -8,6 +8,7 @@ import { summarizeContributions } from '../src/metrics';
 import { toUserStats, shouldContinueLanguageScan } from '../src/crawler/crawler';
 import { RateLimitError, UserNotFoundError } from '../src/crawler/http';
 import { contributionAxisLabels, renderStatsCard } from '../src/card';
+import { themes } from '../src/themes';
 import { parseContributionsPage, parseHumanNumber } from '../src/crawler/parse';
 import type { UserStats } from '../src/types';
 import type { DetailedStats } from '../src/crawler/types';
@@ -199,9 +200,9 @@ test('card endpoint returns an SVG for a GitHub user', async () => {
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type') || '', /image\/svg\+xml/);
     assert.match(body, /DaWesen/);
-    assert.match(body, /#fffbea/);
-    assert.match(body, /GitHub Stats/);
-    assert.match(body, /width="773" height="766"/);
+    assert.match(body, /Total Stars/);
+    assert.match(body, /width="1024" height="1536"/);
+    assert.match(body, /xlink:href="data:image\/jpeg;base64,/);
   });
 });
 
@@ -226,8 +227,8 @@ test('themes endpoint lists all available card themes', async () => {
     const response = await fetch(`${baseUrl}/api/themes`);
     const themes = await response.json() as Array<{ name: string; label: string }>;
     assert.equal(response.status, 200);
-    assert.equal(themes.length, 12);
-    assert.deepEqual(themes.at(-1), { name: 'polar-starlight', label: '极地星光' });
+    assert.equal(themes.length, 13);
+    assert.deepEqual(themes.at(-1), { name: 'blue-archive', label: '蔚蓝档案' });
   });
 });
 
@@ -255,7 +256,7 @@ test('neon-starlight theme shows the motto at the top of the card', () => {
   assert.match(long, /x{37}\.\.\./);
 });
 
-test('card endpoint renders stats, glow icons and the selected font', async () => {
+test('card endpoint renders stats, the pulsing chart and the selected font', async () => {
   await withServer(createApp({ config, cacheDir: testCacheDir, fetchStats: async () => makeStats() }), async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/card/DaWesen?theme=neon-cyber&font=mono`);
     const body = await response.text();
@@ -263,10 +264,19 @@ test('card endpoint renders stats, glow icons and the selected font', async () =
     assert.match(body, /120 contributions/);
     assert.match(body, /Pull Requests/);
     assert.match(body, /polyline/);
-    assert.match(body, /iconGlow/);
+    assert.match(body, /designPulse/);
     assert.match(body, /Cascadia Code/);
     assert.doesNotMatch(body, /lanmei-dream/);
   });
+});
+
+test('every theme renders the design-draft card with an embedded background', () => {
+  for (const name of Object.keys(themes)) {
+    const card = renderStatsCard(makeStats(), name, {});
+    assert.match(card, /width="1024" height="1536"/, `${name} should use the design card size`);
+    assert.match(card, /data:image\/jpeg;base64,/, `${name} should embed its background`);
+    assert.match(card, /Total Stars/, `${name} should render the stat rows`);
+  }
 });
 
 test('languages endpoint returns a standalone languages card', async () => {

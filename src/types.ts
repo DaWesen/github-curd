@@ -88,7 +88,8 @@ export type ThemeName =
   | 'emerald-forest'
   | 'midnight-count'
   | 'minimal-white'
-  | 'polar-starlight';
+  | 'polar-starlight'
+  | 'blue-archive';
 
 export interface CardTheme {
   name: ThemeName;
