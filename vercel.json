@@ -2,12 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/index.ts": {
-      "includeFiles": [
-        "node_modules/.pnpm/@img/**",
-        "node_modules/.pnpm/sharp*/**",
-        "../node_modules/.pnpm/@img/**",
-        "../node_modules/.pnpm/sharp*/**"
-      ]
+      "includeFiles": "node_modules/.pnpm/*sharp*/**"
     }
   }
 }
