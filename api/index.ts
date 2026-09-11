@@ -1,9 +1,40 @@
 import 'dotenv/config';
-import { createApp } from '../src/app';
 import { loadConfig } from '../src/config';
 
-// 无 Token 时爬虫要完整跑一轮 REST+Search+HTML（自带限速），给函数放宽执行时限；
-// 各套餐上限不同，Vercel 会自动取当前套餐允许的最大值
 export const maxDuration = 60;
 
-export default createApp({ config: loadConfig() });
+type AppType = ReturnType<typeof import('../src/app').createApp>;
+
+// 模块初始化改为懒加载 + 错误自暴露：初始化失败时把真实错误以 JSON 返回，
+// 浏览器直接可见，不用去 Vercel 后台翻运行日志
+let appPromise: Promise<AppType> | null = null;
+
+function loadApp(): Promise<AppType> {
+  if (!appPromise) {
+    appPromise = import('../src/app')
+      .then(({ createApp }) => createApp({ config: loadConfig() }))
+      .catch((error) => {
+        appPromise = null;
+        throw error;
+      });
+  }
+  return appPromise;
+}
+
+export default async function handler(req: import('express').Request, res: import('express').Response) {
+  let app: AppType;
+  try {
+    app = await loadApp();
+  } catch (error) {
+    const e = error as Error;
+    res.status(500).json({
+      error: 'Function init failed',
+      message: e?.message ?? String(e),
+      stack: e?.stack ? e.stack.split('\n').slice(0, 10) : undefined,
+      node: process.version,
+      region: process.env.VERCEL_REGION ?? null,
+    });
+    return;
+  }
+  app(req, res);
+}
