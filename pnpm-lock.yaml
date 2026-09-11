@@ -23,6 +23,9 @@ importers:
       express:
         specifier: ^5.2.1
         version: 5.2.1
+      sharp:
+        specifier: ^0.35.4
+        version: 0.35.4(@types/node@24.13.3)
     devDependencies:
       '@types/express':
         specifier: ^5.0.6
@@ -30,9 +33,6 @@ importers:
       '@types/node':
         specifier: ^24.13.3
         version: 24.13.3
-      sharp:
-        specifier: ^0.35.4
-        version: 0.35.4(@types/node@24.13.3)
       tsx:
         specifier: ^4.23.12
         version: 4.23.12
